@@ -29,6 +29,29 @@ from headroom.copilot_auth import apply_copilot_api_auth
 
 logger = logging.getLogger("headroom.proxy")
 
+# CCR token pattern — matches SmartCrusher <<ccr:HASH...>> markers.
+# Used to strip CCR tokens from outbound tool_use input parameters
+# so MCP servers never see session-scoped pointers that would expire.
+# Contract: contracts/ccr_strip.contract.py (INV-05)
+_CCR_TOKEN_RE = __import__("re").compile(r"<<ccr:([a-f0-9]{12,24})\b[^>]*>>")
+
+
+def _strip_ccr_from_value(value: Any) -> Any:
+    """Recursively strip CCR tokens from JSON values.
+
+    Contract: POST-WALK-2, INV-WALK-1
+    Only string values with CCR tokens are modified.
+    """
+    if isinstance(value, str):
+        if "<<ccr:" not in value:
+            return value
+        return _CCR_TOKEN_RE.sub("", value)
+    elif isinstance(value, dict):
+        return {k: _strip_ccr_from_value(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_strip_ccr_from_value(item) for item in value]
+    return value  # int, float, bool, None — unchanged
+
 
 def _parse_completion_tokens_from_sse_chunk(chunk_bytes: bytes) -> int | None:
     """Extract `usage.completion_tokens` from a single SSE chunk if present.
@@ -572,12 +595,17 @@ class StreamingMixin:
                         f"event: content_block_delta\ndata: {json.dumps(citation_delta)}\n\n".encode()
                     )
             elif block.get("type") == "tool_use" and block.get("input"):
+                # CCR strip: remove <<ccr:HASH...>> tokens from tool_use input
+                # before forwarding to client. Prevents MCP servers from
+                # receiving session-scoped pointers that expire.
+                # Contract: FORBIDDEN-STRIP-1, POST-STRIP-1
+                sanitized_input = _strip_ccr_from_value(block["input"])
                 delta = {
                     "type": "content_block_delta",
                     "index": idx,
                     "delta": {
                         "type": "input_json_delta",
-                        "partial_json": json.dumps(block["input"]),
+                        "partial_json": json.dumps(sanitized_input),
                     },
                 }
                 events.append(f"event: content_block_delta\ndata: {json.dumps(delta)}\n\n".encode())
