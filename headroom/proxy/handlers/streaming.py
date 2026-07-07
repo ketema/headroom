@@ -31,9 +31,30 @@ logger = logging.getLogger("headroom.proxy")
 
 # CCR token pattern — matches SmartCrusher <<ccr:HASH...>> markers.
 # Used to strip CCR tokens from outbound tool_use input parameters
-# so MCP servers never see session-scoped pointers that would expire.
+# so MCP servers never see session-scoped pointers that expire.
 # Contract: contracts/ccr_strip.contract.py (INV-05)
 _CCR_TOKEN_RE = __import__("re").compile(r"<<ccr:([a-f0-9]{12,24})\b[^>]*>>")
+
+# Write tools whose input parameters get CCR tokens stripped.
+# Contract: DEFAULT_WRITE_TOOLS, POST-STRIP-2
+_CCR_WRITE_TOOLS: frozenset[str] = frozenset({
+    "memory.remember",
+    "memory.delete",
+    "Write",
+    "Edit",
+    "mcp__memory__memory_remember",
+    "mcp__memory__memory_delete",
+})
+
+
+def _is_write_tool(tool_name: str) -> bool:
+    """Check if tool_name is a write tool (case-insensitive).
+
+    Contract: POST-IS-1
+    """
+    return tool_name in _CCR_WRITE_TOOLS or tool_name.lower() in {
+        t.lower() for t in _CCR_WRITE_TOOLS
+    }
 
 
 def _strip_ccr_from_value(value: Any) -> Any:
@@ -595,11 +616,25 @@ class StreamingMixin:
                         f"event: content_block_delta\ndata: {json.dumps(citation_delta)}\n\n".encode()
                     )
             elif block.get("type") == "tool_use" and block.get("input"):
-                # CCR strip: remove <<ccr:HASH...>> tokens from tool_use input
-                # before forwarding to client. Prevents MCP servers from
-                # receiving session-scoped pointers that expire.
-                # Contract: FORBIDDEN-STRIP-1, POST-STRIP-1
-                sanitized_input = _strip_ccr_from_value(block["input"])
+                # CCR strip: remove <<ccr:HASH...>> tokens from write-tool
+                # input before forwarding to client. Prevents MCP servers
+                # from receiving session-scoped pointers that expire.
+                # Contract: FORBIDDEN-STRIP-1, POST-STRIP-1, POST-STRIP-2,
+                #           ERRORS-STRIP-3 (fail-open)
+                tool_name = block.get("name", "")
+                if _is_write_tool(tool_name):
+                    try:
+                        sanitized_input = _strip_ccr_from_value(block["input"])
+                    except Exception:
+                        # ERRORS-STRIP-3: fail-open — forward unchanged
+                        sanitized_input = block["input"]
+                        logger.warning(
+                            "CCR strip failed for tool %s, forwarding unchanged",
+                            tool_name,
+                        )
+                else:
+                    # POST-STRIP-2: non-write tool input passes through
+                    sanitized_input = block["input"]
                 delta = {
                     "type": "content_block_delta",
                     "index": idx,
