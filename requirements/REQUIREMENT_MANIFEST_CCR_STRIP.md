@@ -104,7 +104,7 @@ contracts/ccr_strip.contract.py (CL12 PRE/POST/INV/ERRORS/FORBIDDEN)
         ↓
 tests/test_ccr_strip_contract.py
         ↓
-headroom/proxy/handlers/anthropic.py (implementation)
+headroom/proxy/handlers/streaming.py (implementation — _strip_ccr_from_value + tool_use integration)
 
 ## 10. Revision History
 | Date | Author | Change |

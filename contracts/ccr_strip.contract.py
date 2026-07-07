@@ -92,6 +92,17 @@ class InvalidExcludeSetError(CCRStripError):
         )
 
 
+class StripFailedError(CCRStripError):
+    """ERRORS-STRIP-3: exception during CCR strip — fail-open, forward unchanged."""
+
+    def __init__(self, cause: Exception, *, clause: str = "ERRORS-STRIP-3") -> None:
+        super().__init__(
+            f"CCR strip failed: {cause}",
+            clause=clause,
+            cause=str(cause),
+        )
+
+
 # ---------------------------------------------------------------------------
 # 3. Dataclasses
 # ---------------------------------------------------------------------------
@@ -288,6 +299,7 @@ STRIP_CONTRACT = {
     "INV-STRIP-3": "result.tool_name == tool_name",
     "ERRORS-STRIP-1": "InvalidToolNameError if tool_name is not a non-empty string",
     "ERRORS-STRIP-2": "InvalidInputJSONError if input_json is not a dict",
+    "ERRORS-STRIP-3": "StripFailedError if exception during strip — fail-open, forward tool_use unchanged",
     "FORBIDDEN-STRIP-1": "CCR tokens MUST NOT appear in sanitized_input for write tools",
     "FORBIDDEN-STRIP-2": "non-CCR content MUST NOT be modified",
     "FORBIDDEN-STRIP-3": "non-write tool input MUST NOT be modified",
@@ -311,13 +323,13 @@ TRACEABILITY_MATRIX = {
         "PRE-STRIP-1", "PRE-STRIP-2", "PRE-STRIP-3",
         "POST-STRIP-1", "POST-STRIP-2", "POST-STRIP-3", "POST-STRIP-4",
         "INV-STRIP-1", "INV-STRIP-2", "INV-STRIP-3",
-        "ERRORS-STRIP-1", "ERRORS-STRIP-2",
+        "ERRORS-STRIP-1", "ERRORS-STRIP-2", "ERRORS-STRIP-3",
         "FORBIDDEN-STRIP-1", "FORBIDDEN-STRIP-2", "FORBIDDEN-STRIP-3",
     ],
     "INV-01": ["FORBIDDEN-STRIP-1"],
     "INV-02": ["POST-STRIP-2", "FORBIDDEN-STRIP-3"],
     "INV-03": ["INV-STRIP-2", "FORBIDDEN-STRIP-2"],
-    "INV-04": [],  # Fail-open is an implementation concern, not contract
+    "INV-04": ["ERRORS-STRIP-3"],  # Fail-open: forward unchanged on exception
     "INV-05": ["CCR_TOKEN_PATTERN"],
     "INV-06": ["POST-WALK-2"],
 }

@@ -331,3 +331,152 @@ class TestTraceability:
         """Enforces: CL12-E — INV-01 through INV-06 mapped."""
         for inv_id in ["INV-01", "INV-02", "INV-03", "INV-05", "INV-06"]:
             assert inv_id in TRACEABILITY_MATRIX
+
+
+# ============================================================================
+# RED PHASE (implementation tests) — these FAIL because the proxy's streaming
+# handler is missing write-tools filtering and fail-open logic.
+# ============================================================================
+
+
+class TestStreamingHandlerCcrStrip:
+    """RED tests: proxy integration — streaming handler tool_use processing.
+
+    These test the ACTUAL streaming handler's _strip_ccr_from_value and its
+    integration with tool_use block processing. They FAIL because:
+    1. No write-tools filtering (POST-STRIP-2 violated)
+    2. No fail-open try/except (ERRORS-STRIP-3 violated)
+
+    Risk tier: HIGH — CCR tokens reaching MCP servers causes data loss.
+    """
+
+    def _import_streaming_handler(self):
+        """Import the streaming handler's _strip_ccr_from_value function."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "streaming",
+            "/Users/kharri04/projects/headroom/headroom/proxy/handlers/streaming.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(mod)
+        except (ImportError, ModuleNotFoundError):
+            pytest.skip("headroom dependencies not available (opentelemetry etc.)")
+        return mod
+
+    def test_strip_ccr_from_value_strips_write_tool_input(self):
+        """Enforces: POST-STRIP-1, FORBIDDEN-STRIP-1
+        CCR tokens in write-tool input MUST be stripped before forwarding.
+        """
+        mod = self._import_streaming_handler()
+        input_data = {"content": "test <<ccr:abc123def456>> end"}
+        result = mod._strip_ccr_from_value(input_data)
+        assert "<<ccr:" not in json.dumps(result), (
+            "FORBIDDEN-STRIP-1 violation: CCR token found in sanitized output\n"
+            "EXPECTED: no <<ccr:HASH...>> tokens in output\n"
+            f"ACTUAL: {json.dumps(result)}\n"
+            "GUIDANCE: all CCR tokens must be stripped from tool_use input"
+        )
+
+    def test_strip_preserves_non_ccr_content(self):
+        """Enforces: INV-STRIP-2, FORBIDDEN-STRIP-2
+        Non-CCR content in string values MUST be preserved exactly.
+        """
+        mod = self._import_streaming_handler()
+        input_data = {"content": "hello <<ccr:abc123def456>> world", "name": "test"}
+        result = mod._strip_ccr_from_value(input_data)
+        assert result["content"] == "hello  world", (
+            "FORBIDDEN-STRIP-2 violation: non-CCR content modified\n"
+            "EXPECTED: 'hello  world'\n"
+            f"ACTUAL: {result['content']}\n"
+            "GUIDANCE: only CCR tokens must be removed, surrounding text preserved"
+        )
+        assert result["name"] == "test", (
+            "INV-STRIP-2 violation: unrelated field modified\n"
+            "EXPECTED: 'test'\n"
+            f"ACTUAL: {result['name']}\n"
+            "GUIDANCE: fields without CCR tokens must pass through unchanged"
+        )
+
+    def test_strip_handles_nested_structures(self):
+        """Enforces: POST-WALK-2, INV-06
+        CCR stripping MUST walk the entire input JSON tree.
+        """
+        mod = self._import_streaming_handler()
+        input_data = {
+            "outer": {"inner": "<<ccr:abc123def456>>"},
+            "list": ["<<ccr:def456abc789>>", "clean"],
+            "num": 42,
+        }
+        result = mod._strip_ccr_from_value(input_data)
+        assert result["outer"]["inner"] == "", (
+            "POST-WALK-2 violation: nested dict value not stripped\n"
+            "EXPECTED: ''\n"
+            f"ACTUAL: {result['outer']['inner']}\n"
+            "GUIDANCE: recursive walk must reach all nested string values"
+        )
+        assert result["list"][0] == "", (
+            "POST-WALK-2 violation: list item not stripped\n"
+            "EXPECTED: ''\n"
+            f"ACTUAL: {result['list'][0]}\n"
+            "GUIDANCE: list items must be walked recursively"
+        )
+        assert result["num"] == 42, (
+            "INV-WALK-1 violation: non-string value modified\n"
+            "EXPECTED: 42\n"
+            f"ACTUAL: {result['num']}\n"
+            "GUIDANCE: int/float/bool/None values must pass through unchanged"
+        )
+
+    def test_strip_no_op_for_clean_input(self):
+        """Enforces: POST-STRIP-2
+        Input without CCR tokens MUST pass through unchanged.
+        """
+        mod = self._import_streaming_handler()
+        input_data = {"content": "clean text", "name": "test"}
+        result = mod._strip_ccr_from_value(input_data)
+        assert result == input_data, (
+            "POST-STRIP-2 violation: clean input was modified\n"
+            f"EXPECTED: {input_data}\n"
+            f"ACTUAL: {result}\n"
+            "GUIDANCE: input without CCR tokens must pass through unchanged"
+        )
+
+    def test_fail_open_on_strip_exception(self):
+        """Enforces: ERRORS-STRIP-3, INV-04
+        If CCR stripping raises an exception, the tool_use MUST be
+        forwarded unchanged (fail-open for availability).
+        """
+        # This test verifies the CONTRACT declares fail-open behavior.
+        # The implementation at streaming.py:602 has no try/except,
+        # so this test documents the gap.
+        contract = STRIP_CONTRACT
+        assert "ERRORS-STRIP-3" in contract, (
+            "ERRORS-STRIP-3 missing from contract\n"
+            "EXPECTED: ERRORS-STRIP-3 clause declaring fail-open behavior\n"
+            "ACTUAL: not in STRIP_CONTRACT\n"
+            "GUIDANCE: contract must declare fail-open on strip exception"
+        )
+        assert "fail-open" in contract["ERRORS-STRIP-3"].lower(), (
+            "ERRORS-STRIP-3 does not declare fail-open\n"
+            "EXPECTED: 'fail-open, forward tool_use unchanged'\n"
+            f"ACTUAL: {contract['ERRORS-STRIP-3']}\n"
+            "GUIDANCE: ERRORS-STRIP-3 must specify fail-open behavior"
+        )
+
+    def test_traceability_inv04_maps_to_errors_strip_3(self):
+        """Enforces: CL12-E, INV-04
+        INV-04 (fail-open) MUST map to ERRORS-STRIP-3 in traceability matrix.
+        """
+        assert "INV-04" in TRACEABILITY_MATRIX, (
+            "INV-04 missing from traceability matrix\n"
+            "EXPECTED: INV-04 mapped to ERRORS-STRIP-3\n"
+            "ACTUAL: not in TRACEABILITY_MATRIX\n"
+            "GUIDANCE: fail-open invariant must be traceable to contract clause"
+        )
+        assert "ERRORS-STRIP-3" in TRACEABILITY_MATRIX["INV-04"], (
+            "INV-04 does not map to ERRORS-STRIP-3\n"
+            f"EXPECTED: ['ERRORS-STRIP-3']\n"
+            f"ACTUAL: {TRACEABILITY_MATRIX['INV-04']}\n"
+            "GUIDANCE: INV-04 must reference ERRORS-STRIP-3 clause"
+        )

@@ -1,0 +1,35 @@
+# Plan: CCR Token Stripping from Tool Call Parameters
+
+## Problem
+Headroom proxy compresses tool results and injects `<<ccr:HASH...>>` tokens. LLM passes these tokens forward in tool_use input parameters. MCP servers (like memory.remember) persist them — storing session-scoped pointers that expire, causing data loss.
+
+## Solution
+Strip CCR tokens from outbound tool_use input parameters in the headroom proxy's streaming handler before forwarding to client.
+
+## Current State (what exists)
+- `contracts/ccr_strip.contract.py` — CL12 contract (5 artifacts, compliant)
+- `tests/test_ccr_strip_contract.py` — 41 contract verification tests (all pass)
+- `headroom/proxy/handlers/streaming.py` — `_strip_ccr_from_value()` + tool_use integration
+- `requirements/REQUIREMENT_MANIFEST_CCR_STRIP.md` — requirements manifest
+
+## What's Missing (constitutional gaps)
+1. True RED tests (tests that fail because implementation doesn't exist)
+2. /adversarial-test-writer invocation
+3. /adversarial-coder invocation
+4. Execution gate (M4.6)
+5. /constitutional-audit
+6. AI Panel critique of plan
+7. CL5 approval before implementation
+
+## Approach
+Since code exists, treat existing implementation as "bridging" (Phase 2 of constitutional-refactor). Run full CCABDD cycle on top:
+
+1. **M3 PLAN** — Submit plan to AI Panel (sub-agent-fabric) → get critique → CL5 approval
+2. **RED** — Invoke /adversarial-test-writer with contract → write true RED tests that fail against current impl
+3. **GREEN** — Invoke /adversarial-coder with error messages → fix implementation to pass tests
+4. **AUDIT** — Invoke /constitutional-audit → fix until ZERO VIOLATIONS
+5. **Commit** — WHY/EXPECTED format with traceability
+
+## Rejected Alternatives
+- Reset and redo from scratch (user said "don't reset, refactor")
+- Skip to audit (violates CCABDD ordering)
