@@ -7,7 +7,7 @@ Headroom proxy compresses tool results and injects `<<ccr:HASH...>>` tokens. LLM
 Strip CCR tokens from outbound tool_use input parameters in the headroom proxy's streaming handler before forwarding to client.
 
 ## Current State (what exists)
-- `contracts/ccr_strip.contract.py` — CL12 contract (5 artifacts, compliant)
+- `headroom/contracts/ccr_strip.contract.py` — CL12 contract (5 artifacts, compliant)
 - `tests/test_ccr_strip_contract.py` — 41 contract verification tests (all pass)
 - `headroom/proxy/handlers/streaming.py` — `_strip_ccr_from_value()` + tool_use integration
 - `requirements/REQUIREMENT_MANIFEST_CCR_STRIP.md` — requirements manifest

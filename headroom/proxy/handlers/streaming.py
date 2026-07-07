@@ -30,16 +30,16 @@ from headroom.copilot_auth import apply_copilot_api_auth
 logger = logging.getLogger("headroom.proxy")
 
 # CCR token stripping — imports walk_and_strip from contract (single source of truth).
-# Contract: contracts/ccr_strip.contract.py (POST-WALK-2, INV-WALK-1)
+# Contract: headroom/contracts/ccr_strip.contract.py (POST-WALK-2, INV-WALK-1)
 # Contract-implementation independence overridden per user directive:
 # duplication eliminated by importing contract's authoritative function.
-import importlib.util as _ilu
-_spec = _ilu.spec_from_file_location(
-    "ccr_strip_contract",
-    "/Users/kharri04/projects/headroom/contracts/ccr_strip.contract.py",
-)
-_contract = _ilu.module_from_spec(_spec)
-_spec.loader.exec_module(_contract)
+# Loaded via headroom._contract_loading.load_contract (importlib.resources —
+# never a hardcoded path — and registers sys.modules before exec_module, which
+# @dataclass(frozen=True) + `from __future__ import annotations` in the
+# contract requires; see headroom/_contract_loading.py for why).
+from headroom._contract_loading import load_contract
+
+_contract = load_contract("headroom.contracts.ccr_strip_contract", "ccr_strip.contract.py")
 walk_and_strip = _contract.walk_and_strip
 
 # Write tools whose input parameters get CCR tokens stripped.
