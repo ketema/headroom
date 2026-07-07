@@ -347,6 +347,7 @@ class TestStreamingHandlerCcrStrip:
     1. Write-tools filtering (POST-STRIP-2)
     2. Fail-open behavior (ERRORS-STRIP-3)
     3. CCR token stripping (POST-STRIP-1, FORBIDDEN-STRIP-1)
+    4. Single source of truth — streaming handler delegates to contract (F2)
 
     Risk tier: HIGH — CCR tokens reaching MCP servers causes data loss.
     """
@@ -449,3 +450,30 @@ class TestStreamingHandlerCcrStrip:
                 "ACTUAL: not found\n"
                 f"GUIDANCE: {seq_id} must be traceable to requirement"
             )
+
+    def test_streaming_handler_delegates_to_contract_walk_and_strip(self):
+        """Enforces: F2 fix — single source of truth
+        Streaming handler's _strip_ccr_from_value MUST delegate to
+        contract's walk_and_strip (not duplicate logic).
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "streaming",
+            "/Users/kharri04/projects/headroom/headroom/proxy/handlers/streaming.py",
+        )
+        try:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        except (ImportError, ModuleNotFoundError):
+            pytest.skip("headroom dependencies not available")
+
+        # Verify _strip_ccr_from_value uses walk_and_strip from contract
+        test_input = {"content": "test <<ccr:abc123def456>> end", "num": 42}
+        result = mod._strip_ccr_from_value(test_input)
+        expected, _ = walk_and_strip(test_input)
+        assert result == expected, (
+            "F2 violation: streaming handler does not delegate to contract\n"
+            f"EXPECTED: {expected}\n"
+            f"ACTUAL: {result}\n"
+            "GUIDANCE: _strip_ccr_from_value must call contract's walk_and_strip"
+        )

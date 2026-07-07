@@ -29,11 +29,18 @@ from headroom.copilot_auth import apply_copilot_api_auth
 
 logger = logging.getLogger("headroom.proxy")
 
-# CCR token pattern — matches SmartCrusher <<ccr:HASH...>> markers.
-# Used to strip CCR tokens from outbound tool_use input parameters
-# so MCP servers never see session-scoped pointers that expire.
-# Contract: contracts/ccr_strip.contract.py (INV-05)
-_CCR_TOKEN_RE = __import__("re").compile(r"<<ccr:([a-f0-9]{12,24})\b[^>]*>>")
+# CCR token stripping — imports walk_and_strip from contract (single source of truth).
+# Contract: contracts/ccr_strip.contract.py (POST-WALK-2, INV-WALK-1)
+# Contract-implementation independence overridden per user directive:
+# duplication eliminated by importing contract's authoritative function.
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location(
+    "ccr_strip_contract",
+    "/Users/kharri04/projects/headroom/contracts/ccr_strip.contract.py",
+)
+_contract = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_contract)
+walk_and_strip = _contract.walk_and_strip
 
 # Write tools whose input parameters get CCR tokens stripped.
 # Contract: DEFAULT_WRITE_TOOLS, POST-STRIP-2
@@ -58,20 +65,14 @@ def _is_write_tool(tool_name: str) -> bool:
 
 
 def _strip_ccr_from_value(value: Any) -> Any:
-    """Recursively strip CCR tokens from JSON values.
+    """Strip CCR tokens from JSON values — delegates to contract's walk_and_strip.
 
     Contract: POST-WALK-2 (all string values have CCR tokens replaced),
               INV-WALK-1 (non-string values returned unchanged)
+    Delegates to contracts/ccr_strip.contract.py::walk_and_strip (single source of truth).
     """
-    if isinstance(value, str):
-        if "<<ccr:" not in value:
-            return value
-        return _CCR_TOKEN_RE.sub("", value)
-    elif isinstance(value, dict):
-        return {k: _strip_ccr_from_value(v) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [_strip_ccr_from_value(item) for item in value]
-    return value  # int, float, bool, None — unchanged
+    sanitized, _tokens_stripped = walk_and_strip(value)
+    return sanitized
 
 
 def _parse_completion_tokens_from_sse_chunk(chunk_bytes: bytes) -> int | None:
