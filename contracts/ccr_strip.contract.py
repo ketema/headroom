@@ -303,6 +303,12 @@ STRIP_CONTRACT = {
     "FORBIDDEN-STRIP-1": "CCR tokens MUST NOT appear in sanitized_input for write tools",
     "FORBIDDEN-STRIP-2": "non-CCR content MUST NOT be modified",
     "FORBIDDEN-STRIP-3": "non-write tool input MUST NOT be modified",
+    "SEQ-1": "streaming handler MUST call _is_write_tool() BEFORE _strip_ccr_from_value() "
+             "Source: REQ-2026-CCR-STRIP, IP-1",
+    "SEQ-2": "streaming handler MUST call _strip_ccr_from_value() BEFORE json.dumps() "
+             "of tool_use delta. Source: REQ-2026-CCR-STRIP, IP-2",
+    "SEQ-3": "streaming handler MUST wrap _strip_ccr_from_value() in try/except "
+             "for fail-open. Source: REQ-2026-CCR-STRIP, ERRORS-STRIP-3",
 }
 
 WRITE_TOOLS_CONTRACT = {
@@ -325,6 +331,7 @@ TRACEABILITY_MATRIX = {
         "INV-STRIP-1", "INV-STRIP-2", "INV-STRIP-3",
         "ERRORS-STRIP-1", "ERRORS-STRIP-2", "ERRORS-STRIP-3",
         "FORBIDDEN-STRIP-1", "FORBIDDEN-STRIP-2", "FORBIDDEN-STRIP-3",
+        "SEQ-1", "SEQ-2", "SEQ-3",
     ],
     "INV-01": ["FORBIDDEN-STRIP-1"],
     "INV-02": ["POST-STRIP-2", "FORBIDDEN-STRIP-3"],

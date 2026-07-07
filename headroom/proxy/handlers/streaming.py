@@ -50,7 +50,7 @@ _CCR_WRITE_TOOLS: frozenset[str] = frozenset({
 def _is_write_tool(tool_name: str) -> bool:
     """Check if tool_name is a write tool (case-insensitive).
 
-    Contract: POST-IS-1
+    Contract: POST-IS-1 (case-insensitive membership in exclude_tools)
     """
     return tool_name in _CCR_WRITE_TOOLS or tool_name.lower() in {
         t.lower() for t in _CCR_WRITE_TOOLS
@@ -60,8 +60,8 @@ def _is_write_tool(tool_name: str) -> bool:
 def _strip_ccr_from_value(value: Any) -> Any:
     """Recursively strip CCR tokens from JSON values.
 
-    Contract: POST-WALK-2, INV-WALK-1
-    Only string values with CCR tokens are modified.
+    Contract: POST-WALK-2 (all string values have CCR tokens replaced),
+              INV-WALK-1 (non-string values returned unchanged)
     """
     if isinstance(value, str):
         if "<<ccr:" not in value:
