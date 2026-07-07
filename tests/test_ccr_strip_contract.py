@@ -1,6 +1,6 @@
 """CCR Strip — RED phase tests.
 
-CONTRACT AUTHORITY: contracts/ccr_strip.contract.py
+CONTRACT AUTHORITY: headroom/contracts/ccr_strip.contract.py
 REQUIREMENTS: requirements/REQUIREMENT_MANIFEST_CCR_STRIP.md
 
 These tests exercise the contract's validators (contract verification)
@@ -13,16 +13,22 @@ Implementation tests FAIL because the proxy doesn't strip CCR tokens yet.
 import pytest
 import json
 
-# Contract imports (validators, constants, exceptions, dataclasses)
-import sys
+# Contract imports (validators, constants, exceptions, dataclasses), via the
+# shared loader in headroom/_contract_loading.py (register-before-exec fix
+# for the dataclasses/sys.modules bug — see tests/test_contract_loading.py).
+# Loaded by direct file path, bypassing `import headroom`, so this test does
+# not require the compiled `headroom._core` Rust extension to run (same
+# technique headroom/release_version.py uses for its bare-script fallback).
 import importlib.util
-_spec = importlib.util.spec_from_file_location(
-    "ccr_strip.contract",
-    "/Users/kharri04/projects/headroom/contracts/ccr_strip.contract.py",
-)
-_contract = importlib.util.module_from_spec(_spec)
-sys.modules["ccr_strip.contract"] = _contract
-_spec.loader.exec_module(_contract)
+from pathlib import Path
+
+_loader_path = Path(__file__).resolve().parent.parent / "headroom" / "_contract_loading.py"
+_loader_spec = importlib.util.spec_from_file_location("_contract_loading_bare", _loader_path)
+_loader = importlib.util.module_from_spec(_loader_spec)
+_loader_spec.loader.exec_module(_loader)
+
+_contract_path = Path(__file__).resolve().parent.parent / "headroom" / "contracts" / "ccr_strip.contract.py"
+_contract = _loader.load_contract_from_path("ccr_strip.contract", _contract_path)
 CCR_TOKEN_RE = _contract.CCR_TOKEN_RE
 CCR_TOKEN_PATTERN = _contract.CCR_TOKEN_PATTERN
 DEFAULT_WRITE_TOOLS = _contract.DEFAULT_WRITE_TOOLS
