@@ -96,11 +96,11 @@ Neither crosses the boundary.
 > "A tool_use block for `memory.remember` with `content='test <<ccr:abc123def456>> end'` arrives at the MCP server as `content='test  end'` — CCR token stripped, surrounding text preserved. A tool_use block for `memory.recall` with the same content passes through unchanged (not a write tool)."
 
 ## 9. Contract Authority
-**Authoritative Source**: `contracts/ccr_strip.contract.py`
+**Authoritative Source**: `headroom/contracts/ccr_strip.contract.py`
 
 requirements/REQUIREMENT_MANIFEST_CCR_STRIP.md (this file)
         ↓
-contracts/ccr_strip.contract.py (CL12 PRE/POST/INV/ERRORS/FORBIDDEN)
+headroom/contracts/ccr_strip.contract.py (CL12 PRE/POST/INV/ERRORS/FORBIDDEN)
         ↓
 tests/test_ccr_strip_contract.py
         ↓
